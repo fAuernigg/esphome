@@ -6,6 +6,7 @@
 #include "esphome/components/nfc/nfc_tag.h"
 #include "esphome/components/nfc/nfc.h"
 #include "esphome/components/nfc/automation.h"
+#include "esphome/core/helpers.h"
 
 #include <cinttypes>
 #include <vector>
@@ -55,6 +56,14 @@ class PN532 : public PollingComponent {
   void format_mode();
   void write_mode(nfc::NdefMessage *message);
   bool powerdown();
+
+  Trigger<> *get_state_trigger() { return &this->state_trigger_; }
+  uint32_t get_last_response_ms() { return last_response_ms_; }
+  void set_error_state(bool error);
+  void add_error_callback(std::function<void(bool)> &&cb) {
+    this->error_callbacks_.add(std::move(cb));
+  }
+
 
  protected:
   void turn_off_rf_();
@@ -114,6 +123,10 @@ class PN532 : public PollingComponent {
     SAM_COMMAND_FAILED,
   } error_code_{NONE};
   CallbackManager<void()> on_finished_write_callback_;
+  bool error_state_{false};
+  Trigger<> state_trigger_;
+  uint32_t last_response_ms_{0};
+  CallbackManager<void(bool)> error_callbacks_;
 };
 
 class PN532BinarySensor : public binary_sensor::BinarySensor {

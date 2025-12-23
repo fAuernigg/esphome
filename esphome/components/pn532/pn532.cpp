@@ -21,6 +21,7 @@ void PN532::setup() {
     if (!this->write_command_({PN532_COMMAND_VERSION_DATA})) {
       ESP_LOGE(TAG, "Error sending version command");
       this->mark_failed();
+      this->set_error_state(true);
       return;
     }
   }
@@ -29,6 +30,7 @@ void PN532::setup() {
   if (!this->read_response(PN532_COMMAND_VERSION_DATA, version_data)) {
     ESP_LOGE(TAG, "Error getting version");
     this->mark_failed();
+    this->set_error_state(true);
     return;
   }
   ESP_LOGD(TAG, "Found chip PN5%02X", version_data[0]);
@@ -42,6 +44,7 @@ void PN532::setup() {
       })) {
     ESP_LOGE(TAG, "No wakeup ack");
     this->mark_failed();
+    this->set_error_state(true);
     return;
   }
 
@@ -49,6 +52,7 @@ void PN532::setup() {
   if (!this->read_response(PN532_COMMAND_SAMCONFIGURATION, wakeup_result)) {
     this->error_code_ = WAKEUP_FAILED;
     this->mark_failed();
+    this->set_error_state(true);
     return;
   }
 
@@ -62,6 +66,7 @@ void PN532::setup() {
       })) {
     this->error_code_ = SAM_COMMAND_FAILED;
     this->mark_failed();
+    this->set_error_state(true);
     return;
   }
 
@@ -73,9 +78,11 @@ void PN532::setup() {
     }
     this->error_code_ = SAM_COMMAND_FAILED;
     this->mark_failed();
+    this->set_error_state(true);
     return;
   }
 
+  this->set_error_state(false);
   this->turn_off_rf_();
 }
 
@@ -101,6 +108,20 @@ bool PN532::powerdown() {
   return true;
 }
 
+void PN532::set_error_state(bool error) {
+  if (this->error_state_ == error)
+    return;
+
+  this->error_state_ = error;
+
+  if (error)
+    this->set_error_state(true);
+  else
+    this->status_clear_warning();
+
+  this->state_trigger_.trigger();
+}
+
 void PN532::update() {
   if (!updates_enabled_)
     return;
@@ -115,8 +136,12 @@ void PN532::update() {
       })) {
     ESP_LOGW(TAG, "Requesting tag read failed!");
     this->status_set_warning();
+    this->set_error_state(true);
     return;
   }
+
+  this->set_error_state(false);
+  last_response_ms_ = millis();
   this->status_clear_warning();
   this->requested_read_ = true;
 }
